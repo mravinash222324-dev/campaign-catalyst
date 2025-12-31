@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isSameDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { mockBriefs, mockClients } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
+import { useClients } from '@/hooks/useClients';
+import { useBriefs } from '@/hooks/useBriefs';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { Database } from '@/integrations/supabase/types';
+
+type PriorityLevel = Database['public']['Enums']['priority_level'];
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -30,12 +34,22 @@ export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Form state
+  const [clientId, setClientId] = useState('');
+  const [title, setTitle] = useState('');
+  const [objective, setObjective] = useState('');
+  const [priority, setPriority] = useState<PriorityLevel>('normal');
+  const [budget, setBudget] = useState('');
+
+  const { clients, isLoading: clientsLoading } = useClients();
+  const { briefs, isLoading: briefsLoading, createBrief } = useBriefs();
+  const { toast } = useToast();
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-
-  // Pad the start of the month
   const startPadding = monthStart.getDay();
   const paddedDays = [...Array(startPadding).fill(null), ...days];
 
@@ -48,7 +62,7 @@ export default function Calendar() {
   };
 
   const getBriefsForDay = (date: Date) => {
-    return mockBriefs.filter(brief => 
+    return briefs.filter(brief => 
       isSameDay(new Date(brief.deadline), date)
     );
   };
@@ -58,6 +72,47 @@ export default function Calendar() {
     setIsDialogOpen(true);
   };
 
+  const handleCreateBrief = async () => {
+    if (!clientId || !title || !objective || !selectedDate) {
+      toast({ title: 'Error', description: 'Please fill all required fields', variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await createBrief.mutateAsync({
+        client_id: clientId,
+        title,
+        objective,
+        priority,
+        budget: budget ? parseFloat(budget) : null,
+        deadline: selectedDate.toISOString(),
+        platforms: [],
+      });
+      
+      setIsDialogOpen(false);
+      resetForm();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setClientId('');
+    setTitle('');
+    setObjective('');
+    setPriority('normal');
+    setBudget('');
+  };
+
+  if (clientsLoading || briefsLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in">
       {/* Header */}
@@ -66,7 +121,7 @@ export default function Calendar() {
           <h1 className="text-2xl font-bold text-foreground">Content Calendar</h1>
           <p className="text-muted-foreground mt-1">Plan and schedule your campaigns</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => { setSelectedDate(new Date()); setIsDialogOpen(true); }}>
           <Plus className="h-4 w-4" />
           New Brief
         </Button>
@@ -80,10 +135,7 @@ export default function Calendar() {
             {format(currentDate, 'MMMM yyyy')}
           </h2>
           <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrevMonth}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-            >
+            <button onClick={goToPrevMonth} className="p-2 rounded-lg hover:bg-muted transition-colors">
               <ChevronLeft className="h-5 w-5 text-muted-foreground" />
             </button>
             <button
@@ -92,10 +144,7 @@ export default function Calendar() {
             >
               Today
             </button>
-            <button
-              onClick={goToNextMonth}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-            >
+            <button onClick={goToNextMonth} className="p-2 rounded-lg hover:bg-muted transition-colors">
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </button>
           </div>
@@ -114,9 +163,7 @@ export default function Calendar() {
         <div className="grid grid-cols-7">
           {paddedDays.map((day, index) => {
             if (!day) {
-              return (
-                <div key={`empty-${index}`} className="min-h-[120px] border-b border-r border-border bg-muted/20" />
-              );
+              return <div key={`empty-${index}`} className="min-h-[120px] border-b border-r border-border bg-muted/20" />;
             }
 
             const briefsForDay = getBriefsForDay(day);
@@ -140,25 +187,21 @@ export default function Calendar() {
                   {format(day, 'd')}
                 </div>
                 
-                {/* Briefs for this day */}
                 <div className="mt-1 space-y-1">
-                  {briefsForDay.slice(0, 2).map(brief => {
-                    const client = mockClients.find(c => c.id === brief.clientId);
-                    return (
-                      <div
-                        key={brief.id}
-                        className={cn(
-                          "px-2 py-1 rounded text-xs font-medium truncate",
-                          brief.priority === 'critical' && "bg-red-500/20 text-red-500",
-                          brief.priority === 'high' && "bg-orange-500/20 text-orange-500",
-                          brief.priority === 'normal' && "bg-blue-500/20 text-blue-500",
-                          brief.priority === 'low' && "bg-emerald-500/20 text-emerald-500"
-                        )}
-                      >
-                        {client?.name}: {brief.title}
-                      </div>
-                    );
-                  })}
+                  {briefsForDay.slice(0, 2).map(brief => (
+                    <div
+                      key={brief.id}
+                      className={cn(
+                        "px-2 py-1 rounded text-xs font-medium truncate",
+                        brief.priority === 'critical' && "bg-red-500/20 text-red-500",
+                        brief.priority === 'high' && "bg-orange-500/20 text-orange-500",
+                        brief.priority === 'normal' && "bg-blue-500/20 text-blue-500",
+                        brief.priority === 'low' && "bg-emerald-500/20 text-emerald-500"
+                      )}
+                    >
+                      {brief.clients?.name}: {brief.title}
+                    </div>
+                  ))}
                   {briefsForDay.length > 2 && (
                     <div className="text-xs text-muted-foreground px-2">
                       +{briefsForDay.length - 2} more
@@ -183,13 +226,13 @@ export default function Calendar() {
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="client">Client</Label>
-              <Select>
+              <Label htmlFor="client">Client *</Label>
+              <Select value={clientId} onValueChange={setClientId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockClients.map(client => (
+                  {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.name}
                     </SelectItem>
@@ -199,19 +242,29 @@ export default function Calendar() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="title">Campaign Title</Label>
-              <Input id="title" placeholder="Enter campaign title" />
+              <Label htmlFor="title">Campaign Title *</Label>
+              <Input 
+                id="title" 
+                placeholder="Enter campaign title" 
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="objective">Objective</Label>
-              <Textarea id="objective" placeholder="Describe the campaign objective" />
+              <Label htmlFor="objective">Objective *</Label>
+              <Textarea 
+                id="objective" 
+                placeholder="Describe the campaign objective"
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
-                <Select>
+                <Select value={priority} onValueChange={(v) => setPriority(v as PriorityLevel)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select priority" />
                   </SelectTrigger>
@@ -226,22 +279,13 @@ export default function Calendar() {
 
               <div className="space-y-2">
                 <Label htmlFor="budget">Budget (₹)</Label>
-                <Input id="budget" type="number" placeholder="0" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Platforms</Label>
-              <div className="flex flex-wrap gap-2">
-                {['Facebook', 'Instagram', 'LinkedIn', 'Twitter', 'Google Ads'].map(platform => (
-                  <Badge 
-                    key={platform} 
-                    variant="outline" 
-                    className="cursor-pointer hover:bg-primary/10 hover:border-primary transition-colors"
-                  >
-                    {platform}
-                  </Badge>
-                ))}
+                <Input 
+                  id="budget" 
+                  type="number" 
+                  placeholder="0"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                />
               </div>
             </div>
           </div>
@@ -250,8 +294,8 @@ export default function Calendar() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => setIsDialogOpen(false)}>
-              Create Brief
+            <Button onClick={handleCreateBrief} disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create Brief'}
             </Button>
           </div>
         </DialogContent>
