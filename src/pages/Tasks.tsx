@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Search, Filter, LayoutGrid, List, Plus } from 'lucide-react';
+import { Search, Filter, LayoutGrid, List, Plus, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TaskCard } from '@/components/dashboard/TaskCard';
-import { mockTasks } from '@/lib/mock-data';
-import { TaskStatus } from '@/types';
+import { useTasks } from '@/hooks/useTasks';
+import { Database } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
+
+type TaskStatus = Database['public']['Enums']['task_status'];
 
 const columns: { id: TaskStatus; label: string; color: string }[] = [
   { id: 'pending', label: 'To Do', color: 'bg-amber-500' },
@@ -18,10 +20,26 @@ const columns: { id: TaskStatus; label: string; color: string }[] = [
 export default function Tasks() {
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
+  const { tasks, isLoading, updateTaskStatus } = useTasks();
 
   const getTasksByStatus = (status: TaskStatus) => {
-    return mockTasks.filter(task => task.status === status);
+    return tasks.filter(task => task.status === status);
   };
+
+  const filteredTasks = searchQuery
+    ? tasks.filter(task => 
+        task.briefs?.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.type.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : tasks;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in">
@@ -80,7 +98,7 @@ export default function Tasks() {
       {view === 'kanban' && (
         <div className="grid grid-cols-4 gap-4">
           {columns.map(column => {
-            const tasks = getTasksByStatus(column.id);
+            const columnTasks = getTasksByStatus(column.id);
             
             return (
               <div key={column.id} className="space-y-3">
@@ -89,17 +107,17 @@ export default function Tasks() {
                   <div className={cn("h-2 w-2 rounded-full", column.color)} />
                   <h3 className="font-medium text-foreground">{column.label}</h3>
                   <Badge variant="secondary" className="ml-auto">
-                    {tasks.length}
+                    {columnTasks.length}
                   </Badge>
                 </div>
 
                 {/* Column Content */}
                 <div className="space-y-3 min-h-[400px] rounded-xl bg-muted/30 p-3">
-                  {tasks.map(task => (
+                  {columnTasks.map(task => (
                     <TaskCard key={task.id} task={task} />
                   ))}
                   
-                  {tasks.length === 0 && (
+                  {columnTasks.length === 0 && (
                     <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-border">
                       <p className="text-sm text-muted-foreground">No tasks</p>
                     </div>
@@ -114,41 +132,47 @@ export default function Tasks() {
       {/* List View */}
       {view === 'list' && (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Task</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Type</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Priority</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Deadline</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockTasks.map(task => (
-                <tr key={task.id} className="border-b border-border hover:bg-muted/20 transition-colors">
-                  <td className="p-4">
-                    <p className="font-medium text-foreground">Task #{task.id}</p>
-                    <p className="text-sm text-muted-foreground">Brief #{task.briefId}</p>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant="outline">{task.type}</Badge>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant={task.status.replace('_', '-') as any}>
-                      {task.status.replace('_', ' ')}
-                    </Badge>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant={task.priority as any}>{task.priority}</Badge>
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {new Date(task.deadline).toLocaleDateString()}
-                  </td>
+          {filteredTasks.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No tasks found. Create your first task!
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Task</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Type</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Priority</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Deadline</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredTasks.map(task => (
+                  <tr key={task.id} className="border-b border-border hover:bg-muted/20 transition-colors">
+                    <td className="p-4">
+                      <p className="font-medium text-foreground">{task.briefs?.title || 'Untitled'}</p>
+                      <p className="text-sm text-muted-foreground">{task.briefs?.clients?.name || 'No client'}</p>
+                    </td>
+                    <td className="p-4">
+                      <Badge variant="outline">{task.type}</Badge>
+                    </td>
+                    <td className="p-4">
+                      <Badge variant={task.status.replace('_', '-') as any}>
+                        {task.status.replace('_', ' ')}
+                      </Badge>
+                    </td>
+                    <td className="p-4">
+                      <Badge variant={task.priority as any}>{task.priority}</Badge>
+                    </td>
+                    <td className="p-4 text-sm text-muted-foreground">
+                      {new Date(task.deadline).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

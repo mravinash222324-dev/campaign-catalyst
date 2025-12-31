@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
-import LoginPage from "./pages/LoginPage";
+import Index from "./pages/Index";
+import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import Calendar from "./pages/Calendar";
 import Tasks from "./pages/Tasks";
@@ -16,117 +17,153 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return null;
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
+}
 
+function AppRoutes() {
   return (
     <Routes>
-      <Route 
-        path="/" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
-      />
+      <Route path="/" element={<Index />} />
+      <Route path="/auth" element={<AuthPage />} />
       <Route 
         path="/dashboard" 
         element={
-          <AppLayout>
-            <Dashboard />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/calendar" 
         element={
-          <AppLayout>
-            <Calendar />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Calendar />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/tasks" 
         element={
-          <AppLayout>
-            <Tasks />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Tasks />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/briefs" 
         element={
-          <AppLayout>
-            <Tasks />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Tasks />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/qc-review" 
         element={
-          <AppLayout>
-            <Tasks />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Tasks />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/client-review" 
         element={
-          <AppLayout>
-            <Tasks />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Tasks />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/ads" 
         element={
-          <AppLayout>
-            <AdsManager />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <AdsManager />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/campaigns" 
         element={
-          <AppLayout>
-            <AdsManager />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <AdsManager />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/analytics" 
         element={
-          <AppLayout>
-            <Analytics />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Analytics />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/performance" 
         element={
-          <AppLayout>
-            <Analytics />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Analytics />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/clients" 
         element={
-          <AppLayout>
-            <Clients />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Clients />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/team" 
         element={
-          <AppLayout>
-            <Clients />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Clients />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route 
         path="/settings" 
         element={
-          <AppLayout>
-            <Dashboard />
-          </AppLayout>
+          <ProtectedRoute>
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
+          </ProtectedRoute>
         } 
       />
       <Route path="*" element={<NotFound />} />

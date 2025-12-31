@@ -16,15 +16,16 @@ import {
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { roleLabels } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
-import { UserRole } from '@/types';
+import { Database } from '@/integrations/supabase/types';
+
+type AppRole = Database['public']['Enums']['app_role'];
 
 interface NavItem {
   label: string;
   icon: React.ElementType;
   href: string;
-  roles: UserRole[];
+  roles: AppRole[];
 }
 
 const navItems: NavItem[] = [
@@ -43,13 +44,25 @@ const navItems: NavItem[] = [
   { label: 'Settings', icon: Settings, href: '/settings', roles: ['admin', 'dm_manager'] },
 ];
 
+const roleLabels: Record<AppRole, string> = {
+  admin: 'Admin',
+  dm_manager: 'DM Manager',
+  copywriter: 'Copywriter',
+  copy_qc: 'Copy QC',
+  designer: 'Designer',
+  design_qc: 'Design QC',
+  client_coordinator: 'Client Coordinator',
+  dm_team_lead: 'DM Team Lead',
+};
+
 export function AppSidebar() {
-  const { user, logout } = useAuth();
+  const { profile, role, signOut } = useAuth();
   const location = useLocation();
 
-  if (!user) return null;
-
-  const filteredNavItems = navItems.filter(item => item.roles.includes(user.role));
+  // Default to showing all items if no role (for first-time users)
+  const filteredNavItems = role 
+    ? navItems.filter(item => item.roles.includes(role))
+    : navItems;
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border">
@@ -88,14 +101,18 @@ export function AppSidebar() {
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/50 p-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20 text-primary">
-              {user.name.charAt(0)}
+              {profile?.name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{user.name}</p>
-              <p className="text-xs text-sidebar-foreground/60">{roleLabels[user.role]}</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {profile?.name || 'User'}
+              </p>
+              <p className="text-xs text-sidebar-foreground/60">
+                {role ? roleLabels[role] : 'No Role'}
+              </p>
             </div>
             <button
-              onClick={logout}
+              onClick={signOut}
               className="rounded-lg p-2 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
             >
               <LogOut className="h-4 w-4" />
